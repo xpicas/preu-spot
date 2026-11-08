@@ -14,12 +14,12 @@
   <main class="wrap">
     <header class="top">
       <div>
-        <h1>Preu SPOT de la llum</h1>
-        <p class="sub">Mercat diari d'OMIE · zona Espanya · sense peatges ni impostos</p>
+        <h1 id="title">Preu SPOT de la llum</h1>
+        <p class="sub" id="sub">Mercat diari d'OMIE · zona Espanya · sense peatges ni impostos</p>
       </div>
-      <div class="unit-switch" role="group" aria-label="Unitats">
-        <button type="button" data-unit="kwh" aria-pressed="true">€/kWh</button>
-        <button type="button" data-unit="mwh" aria-pressed="false">€/MWh</button>
+      <div class="unit-switch" role="group" aria-label="Tipus de preu">
+        <button type="button" data-mode="spot" aria-pressed="true">SPOT</button>
+        <button type="button" data-mode="final" aria-pressed="false">Amb peatges i impostos</button>
       </div>
     </header>
 
@@ -28,7 +28,6 @@
         <p class="eyebrow" id="now-label">Ara</p>
         <p class="big"><span id="now-price">—</span> <span class="unit" id="now-unit"></span></p>
         <p class="hero-meta">
-          <span class="level" id="now-level" hidden></span>
           <span id="now-vs"></span>
         </p>
       </div>
@@ -70,6 +69,7 @@
       </div>
       <div class="legend" id="legend"></div>
       <div class="chart-box"><canvas id="chart" role="img" aria-label="Gràfica del preu SPOT"></canvas></div>
+      <p class="note scale-note" id="scale-note"></p>
       <p class="note" id="compare-note" hidden></p>
     </section>
 
@@ -96,9 +96,25 @@
       <div class="table-wrap"><table id="table"></table></div>
     </details>
 
+    <details class="card cfg-card">
+      <summary>Paràmetres del preu amb peatges i impostos</summary>
+      <p class="note">Preu final = (SPOT × (1 + pèrdues) + altres costos + peatges i càrrecs del període) × (1 + IEE) × (1 + IVA). Tarifa 2.0TD (≤ 15 kW), península. No inclou el terme de potència ni quotes fixes.</p>
+      <div class="cfg-grid">
+        <label><span class="lk">Peatges + càrrecs P1 punta <span>€/kWh</span></span><input id="cfg-p1" inputmode="decimal"></label>
+        <label><span class="lk">Peatges + càrrecs P2 pla <span>€/kWh</span></span><input id="cfg-p2" inputmode="decimal"></label>
+        <label><span class="lk">Peatges + càrrecs P3 vall <span>€/kWh</span></span><input id="cfg-p3" inputmode="decimal"></label>
+        <label><span class="lk">Pèrdues sobre l'energia <span>%</span></span><input id="cfg-loss" inputmode="decimal"></label>
+        <label><span class="lk">Altres costos (ajust, marge…) <span>€/kWh</span></span><input id="cfg-adj" inputmode="decimal"></label>
+        <label><span class="lk">Impost elèctric (IEE) <span>%</span></span><input id="cfg-iee" inputmode="decimal"></label>
+        <label><span class="lk">IVA <span>%</span></span><input id="cfg-iva" inputmode="decimal"></label>
+      </div>
+      <p class="note">Valors per defecte: peatges (Resolució CNMC 18/12/2025) i càrrecs (Ordre TED/1524/2025) vigents des de l'1/1/2026; IEE 5,11269632 %; IVA 21 %. Períodes: P1 de 10 a 14 h i de 18 a 22 h; P2 de 8 a 10 h, de 14 a 18 h i de 22 a 24 h; P3 de 0 a 8 h, caps de setmana i festius nacionals de data fixa (els festius autonòmics i locals no compten). Pèrdues i altres costos estan a 0: si la teva comercialitzadora els aplica, el preu real serà més alt.</p>
+      <button type="button" class="chip" id="cfg-reset">Restaura els valors 2026</button>
+    </details>
+
     <footer class="foot">
       <p id="source-line">Carregant dades…</p>
-      <p>El preu SPOT és el preu marginal del mercat diari d'OMIE (publicat en €/MWh; aquí es mostra per defecte en €/kWh: 100 €/MWh = 0,1000 €/kWh). No és el PVPC: no inclou peatges, càrrecs, ajust ni impostos. Els preus del dia següent es publiquen cap a les 13:00.</p>
+      <p>El preu SPOT és el preu marginal del mercat diari d'OMIE (publicat en €/MWh, aquí convertit a €/kWh). No és el PVPC. Els preus del dia següent es publiquen cap a les 13:00.</p>
     </footer>
   </main>
 
