@@ -7,10 +7,7 @@
   --text-secondary: #52514e;
   --text-muted: #77766f;
   --grid: #ebeae6;
-  --today: #2a78d6;
-  --today-past: #9ec5f4;
-  --today-now: #104281;
-  --tomorrow: #eb6834;
+  --tomorrow: #2a78d6;
   --accent: #2a78d6;
   --good: #0ca30c;
   --warn: #c98500;
@@ -27,10 +24,7 @@
     --text-secondary: #c3c2b7;
     --text-muted: #96958c;
     --grid: #2a2a28;
-    --today: #3987e5;
-    --today-past: #1c4f8a;
-    --today-now: #9ec5f4;
-    --tomorrow: #d95926;
+    --tomorrow: #6da7ec;
     --accent: #3987e5;
     --good: #0ca30c;
     --warn: #fab219;
@@ -68,11 +62,6 @@ h2 { font-size: 16px; margin: 0; }
 .big { margin: 2px 0 6px; font-size: 46px; font-weight: 650; letter-spacing: -.02em; line-height: 1.05; }
 .big .unit { font-size: 18px; font-weight: 500; color: var(--text-secondary); letter-spacing: 0; }
 .hero-meta { margin: 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: var(--text-secondary); font-size: 14px; }
-.level { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text-primary); }
-.level::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
-.level[data-l="low"]::before { background: var(--good); }
-.level[data-l="mid"]::before { background: var(--warn); }
-.level[data-l="high"]::before { background: var(--bad); }
 .hero-side { display: grid; gap: 8px; min-width: 200px; }
 .mini { display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid var(--border); padding-top: 8px; }
 .mini:first-child { border-top: 0; padding-top: 0; }
@@ -144,3 +133,13 @@ td.down { color: var(--good); }
 .foot { color: var(--text-muted); font-size: 12px; padding: 0 4px; }
 .foot p { margin: 4px 0; }
 .err { color: var(--bad); }
+
+/* paràmetres */
+.cfg-card summary { cursor: pointer; font-weight: 600; }
+.cfg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 10px 0; }
+.cfg-grid label { display: grid; gap: 4px; font-size: 13px; color: var(--text-secondary); }
+.cfg-grid label .lk span { color: var(--text-muted); font-size: 12px; }
+.cfg-grid input { font: inherit; font-variant-numeric: tabular-nums; color: var(--text-primary); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+
+.scale-note { display: flex; align-items: center; gap: 8px; }
+.scale-bar { display: inline-block; width: 90px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #0ca30c, #f2b705, #d03b3b); }
