@@ -105,6 +105,16 @@
     final: { green: 0.05, mid: 0.20, red: 0.35 },
   };
   const RAMP = ['#0ca30c', '#f2b705', '#d03b3b']; // verd, groc, vermell
+  // Color sòlid que correspon a un preu (el mateix que té la barra a aquella alçada).
+  function colorAt(v) {
+    const sc = COLOR_SCALE[state.mode === 'final' ? 'final' : 'spot'];
+    const t = Math.min(1, Math.max(0, (v - sc.green) / (sc.red - sc.green)));
+    const m = (sc.mid - sc.green) / (sc.red - sc.green);
+    const [c0, c1, u] = t <= m ? [RAMP[0], RAMP[1], t / m] : [RAMP[1], RAMP[2], (t - m) / (1 - m)];
+    const rgb = (h) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16));
+    const [a, b] = [rgb(c0), rgb(c1)];
+    return `rgb(${a.map((x, k) => Math.round(x + (b[k] - x) * u)).join(',')})`;
+  }
 
   // Converteix un dia en brut (€/MWh) a valors en €/kWh segons el mode.
   function derive(raw, ds) {
@@ -184,26 +194,6 @@
     for (let h = 0; h < 24; h++) out.push(mean(slots.slice(h * 4, h * 4 + 4)));
     return out;
   }
-  function extremes(arr) {
-    let mi = null, ma = null;
-    arr.forEach((v, i) => {
-      if (v == null) return;
-      if (mi == null || v < arr[mi]) mi = i;
-      if (ma == null || v > arr[ma]) ma = i;
-    });
-    return { mi, ma };
-  }
-  function cheapestWindow(slots, hours, fromSlot = 0) {
-    const w = hours * 4;
-    let best = null;
-    for (let s = fromSlot; s + w <= SLOTS; s++) {
-      const part = slots.slice(s, s + w);
-      if (part.some((v) => v == null)) continue;
-      const avg = mean(part);
-      if (best == null || avg < best.avg) best = { start: s, end: s + w, avg };
-    }
-    return best;
-  }
   const currentSlot = () => { const { h, m } = mParts(new Date()); return Math.floor((h * 60 + m) / 15); };
 
   // ---------- render ----------
@@ -217,7 +207,7 @@
     if (!today) {
       $('now-price').textContent = '—';
       $('now-label').textContent = 'Ara · sense dades';
-      ['next-price', 'hour-price'].forEach((id) => ($(id).textContent = '—'));
+      $('now-price').style.color = '';
       $('now-vs').textContent = '';
       return;
     }
@@ -225,12 +215,7 @@
     const per = today.per[idx];
     $('now-label').textContent = `Ara · ${slotRange(idx)} (${dayFmt.format(dsToUTC(t))})${state.mode === 'final' ? ` · P${per} ${PNAME[per]}` : ''}`;
     $('now-price').textContent = fmt(p);
-    const next = idx + 1 < SLOTS ? today.slots[idx + 1] : derive(state.days.get(addDays(t, 1)), addDays(t, 1))?.slots[0];
-    $('next-label').textContent = `Següent quart (${slotRange((idx + 1) % SLOTS)})`;
-    $('next-price').textContent = fmtU(next);
-    const h = Math.floor(idx / 4);
-    $('hour-label').textContent = `Mitjana ${pad(h)}:00–${pad((h + 1) % 24)}:00`;
-    $('hour-price').textContent = fmtU(mean(today.slots.slice(h * 4, h * 4 + 4)));
+    $('now-price').style.color = p == null ? '' : colorAt(p);
 
     const avg = mean(today.slots);
     if (p != null && avg) {
@@ -241,64 +226,9 @@
     } else $('now-vs').textContent = '';
   }
 
-  const fmtSmall = (p) => (p == null ? '—' : `${fmt(p)} <small>${unitLabel()}</small>`);
-  function statBlock(k, v, s, wide = false) {
-    return `<div class="stat${wide ? ' wide' : ''}"><span class="stat-k">${k}</span><span class="stat-v">${v}</span>${s ? `<span class="stat-s">${s}</span>` : ''}</div>`;
-  }
 
-  function renderStats(base, next, baseDs, nextDs) {
-    const parts = [];
-    const add = (d, ds, other) => {
-      const name = dayName(ds);
-      if (!d) { parts.push(statBlock(`${name} · mitjana`, '—', ds === addDays(todayStr(), 1) ? 'Encara no publicat (≈13:00)' : 'Sense dades', true)); return; }
-      const { mi, ma } = extremes(d.slots);
-      const avg = mean(d.slots);
-      let cmp = '';
-      if (other) {
-        const oa = mean(other.slots);
-        const diff = ((avg - oa) / Math.abs(oa)) * 100;
-        cmp = `${diff >= 0 ? '+' : '−'}${fPct.format(Math.abs(diff))} % vs ${dayName(baseDs).toLowerCase()}`;
-      }
-      parts.push(statBlock(`${name} · mitjana`, fmtSmall(avg), cmp || `${d.n} preus`));
-      parts.push(statBlock(`${name} · mínim`, fmtSmall(d.slots[mi]), `<span class="t">${slotRange(mi)}</span>`));
-      parts.push(statBlock(`${name} · màxim`, fmtSmall(d.slots[ma]), `<span class="t">${slotRange(ma)}</span>`));
-    };
-    add(base, baseDs, null);
-    if (state.compare) add(next, nextDs, base);
-    $('stats').innerHTML = parts.join('');
-  }
 
-  function renderWindows(base, next, baseDs, nextDs) {
-    const hours = +$('win-hours').value;
-    const isToday = baseDs === todayStr();
-    const cards = [];
-    const card = (d, ds, from) => {
-      const name = dayName(ds);
-      if (!d) return `<div class="win"><div class="win-k">${name}</div><div class="win-v">—</div><div class="win-s">Sense dades</div></div>`;
-      const w = cheapestWindow(d.slots, hours, from);
-      if (!w) return `<div class="win"><div class="win-k">${name}</div><div class="win-v">—</div><div class="win-s">No queda prou dia</div></div>`;
-      const a = slotLabel(w.start), b = w.end >= SLOTS ? '24:00' : slotLabel(w.end);
-      return `<div class="win"><div class="win-k">${name}${from ? ' (des d\'ara)' : ''}</div><div class="win-v">${a}–${b}</div><div class="win-s">Mitjana ${fmtU(w.avg)}</div></div>`;
-    };
-    cards.push(card(base, baseDs, isToday ? currentSlot() : 0));
-    if (state.compare) cards.push(card(next, nextDs, 0));
-    $('windows').innerHTML = cards.join('');
-  }
 
-  function renderTable(base, next, baseDs, nextDs) {
-    const showNext = state.compare && next;
-    const hb = base ? hourly(base.slots) : new Array(24).fill(null);
-    const hn = showNext ? hourly(next.slots) : null;
-    const nowH = baseDs === todayStr() ? Math.floor(currentSlot() / 4) : -1;
-    let html = `<thead><tr><th>Hora</th><th>${dayName(baseDs)} (${unitLabel()})</th>${hn ? `<th>${dayName(nextDs)}</th><th>Dif.</th>` : ''}</tr></thead><tbody>`;
-    for (let h = 0; h < 24; h++) {
-      const d = hn && hb[h] != null && hn[h] != null ? hn[h] - hb[h] : null;
-      html += `<tr${h === nowH ? ' class="is-now"' : ''}><td>${pad(h)}:00–${pad((h + 1) % 24)}:00</td><td>${fmt(hb[h])}</td>`;
-      if (hn) html += `<td>${fmt(hn[h])}</td><td class="${d == null ? '' : d > 0 ? 'up' : 'down'}">${d == null ? '—' : (d > 0 ? '+' : d < 0 ? '−' : '') + fmt(Math.abs(d))}</td>`;
-      html += '</tr>';
-    }
-    $('table').innerHTML = html + '</tbody>';
-  }
 
   // línia vertical "ara"
   const nowLine = {
@@ -322,7 +252,6 @@
     const n = res === 15 ? SLOTS : 24;
     const pick = (arr) => (res === 15 ? arr : hourly(arr));
     const series = (d) => (d ? pick(d.slots) : null);
-    const comps = (d) => (d ? { energy: pick(d.energy), toll: pick(d.toll), tax: pick(d.tax), per: res === 15 ? d.per : d.per.filter((_, i) => i % 4 === 0) } : null);
     const a = series(base);
     const b = state.compare ? series(next) : null;
     const labels = Array.from({ length: n }, (_, i) => slotLabel(i, res));
@@ -348,8 +277,6 @@
       return (gradCache[key] = g);
     };
     const full = ramp(1), past = ramp(0.35);
-    const f2 = (v) => nf(2, 2).format(v);
-    $('scale-note').innerHTML = `<span class="scale-bar" aria-hidden="true"></span> Color segons el preu (escala fixa): verd ≤ ${f2(sc.green)} · groc ${f2(sc.mid)} · vermell ≥ ${f2(sc.red)} €/kWh`;
     const cGrid = css('--grid'), cText = css('--text-secondary'), cMuted = css('--text-muted'), cSurf = css('--surface');
 
     const datasets = [];
@@ -358,12 +285,12 @@
       backgroundColor: (c) => (curIdx != null && c.dataIndex < curIdx ? past(c) : full(c)),
       borderColor: cNowRing, borderWidth: a.map((_, i) => (i === curIdx ? 2 : 0)),
       borderRadius: { topLeft: res === 15 ? 2 : 4, topRight: res === 15 ? 2 : 4 }, borderSkipped: 'start',
-      categoryPercentage: 1, barPercentage: res === 15 ? 0.82 : 0.86, _c: comps(base),
+      categoryPercentage: 1, barPercentage: res === 15 ? 0.82 : 0.86,
     });
     if (b) datasets.push({
       type: 'line', label: dayName(nextDs), data: b, order: 1,
       borderColor: cTom, backgroundColor: cTom, borderWidth: 2, stepped: 'middle',
-      pointRadius: 0, pointHoverRadius: 4, pointHoverBorderColor: cSurf, pointHoverBorderWidth: 2, spanGaps: false, _c: comps(next),
+      pointRadius: 0, pointHoverRadius: 4, pointHoverBorderColor: cSurf, pointHoverBorderWidth: 2, spanGaps: false,
     });
 
     // llegenda HTML (només si hi ha 2 sèries)
@@ -374,7 +301,6 @@
 
     const unit = unitLabel();
     const dec = 4;
-    const f4 = (v) => (v == null ? '—' : nf(4, 4).format(v));
     const cfg = {
       data: { labels, datasets },
       options: {
@@ -385,20 +311,10 @@
           legend: { display: false },
           nowLine: { index: curIdx, color: cText },
           tooltip: {
+            itemSort: (x, y) => x.datasetIndex - y.datasetIndex, // primer el dia triat, després demà
             callbacks: {
               title: (items) => slotRange(items[0].dataIndex, res),
               label: (it) => ` ${it.dataset.label}: ${it.raw == null ? '—' : nf(dec, dec).format(it.raw)} ${unit}`,
-              afterLabel: (it) => {
-                const c = it.dataset._c;
-                if (state.mode !== 'final' || !c || it.raw == null) return '';
-                const i = it.dataIndex, p = c.per[i];
-                return [`    Energia ${f4(c.energy[i])}`, `    Peatges i càrrecs P${p} (${PNAME[p]}) ${f4(c.toll[i])}`, `    Impostos (IEE + IVA) ${f4(c.tax[i])}`];
-              },
-              afterBody: (items) => {
-                if (items.length < 2 || items[0].raw == null || items[1].raw == null) return '';
-                const d = items[1].raw - items[0].raw;
-                return ` Diferència: ${d > 0 ? '+' : d < 0 ? '−' : ''}${nf(dec, dec).format(Math.abs(d))} ${unit}`;
-              },
             },
           },
         },
@@ -469,10 +385,7 @@
     $('title').textContent = fin ? 'Preu final de la llum' : 'Preu SPOT de la llum';
     renderHero(today);
     renderNav(baseDs, next, nextDs);
-    renderStats(base, next, baseDs, nextDs);
     renderChart(base, next, baseDs, nextDs);
-    renderWindows(base, next, baseDs, nextDs);
-    renderTable(base, next, baseDs, nextDs);
     renderFooter();
   }
 
@@ -518,7 +431,6 @@
     state.res = +b.dataset.res; save('res', state.res); setPressed('[data-res]', 'res', state.res); render();
   }));
   $('compare').addEventListener('change', (e) => { state.compare = e.target.checked; save('compare', state.compare ? '1' : '0'); render(); });
-  $('win-hours').addEventListener('change', () => render());
   $('prev-day').addEventListener('click', () => { state.base = addDays(state.base, -1); render(); });
   $('next-day').addEventListener('click', () => { state.base = addDays(state.base, 1); render(); });
   $('go-today').addEventListener('click', () => { state.base = todayStr(); render(); });
