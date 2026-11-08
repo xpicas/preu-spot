@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Preu SPOT de la llum · OMIE</title>
+  <meta name="description" content="Preu majorista SPOT de l'electricitat a Espanya (mercat diari OMIE), cada 15 minuts. Avui i demà.">
+  <meta name="theme-color" content="#2a78d6">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232a78d6'/><path d='M18 4 8 18h7l-2 10 10-14h-7z' fill='white'/></svg>">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <div>
+        <h1>Preu SPOT de la llum</h1>
+        <p class="sub">Mercat diari d'OMIE · zona Espanya · sense peatges ni impostos</p>
+      </div>
+      <div class="unit-switch" role="group" aria-label="Unitats">
+        <button type="button" data-unit="kwh" aria-pressed="true">€/kWh</button>
+        <button type="button" data-unit="mwh" aria-pressed="false">€/MWh</button>
+      </div>
+    </header>
+
+    <section class="hero card" aria-live="polite">
+      <div class="hero-main">
+        <p class="eyebrow" id="now-label">Ara</p>
+        <p class="big"><span id="now-price">—</span> <span class="unit" id="now-unit"></span></p>
+        <p class="hero-meta">
+          <span class="level" id="now-level" hidden></span>
+          <span id="now-vs"></span>
+        </p>
+      </div>
+      <div class="hero-side">
+        <div class="mini">
+          <span class="mini-k" id="next-label">Següent quart</span>
+          <span class="mini-v" id="next-price">—</span>
+        </div>
+        <div class="mini">
+          <span class="mini-k" id="hour-label">Mitjana d'aquesta hora</span>
+          <span class="mini-v" id="hour-price">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats" id="stats"></section>
+
+    <section class="card chart-card">
+      <div class="chart-head">
+        <div class="date-nav">
+          <button type="button" class="icon-btn" id="prev-day" aria-label="Dia anterior">‹</button>
+          <div class="date-title">
+            <h2 id="chart-title">Avui</h2>
+            <input type="date" id="date-pick" aria-label="Tria un dia">
+          </div>
+          <button type="button" class="icon-btn" id="next-day" aria-label="Dia següent">›</button>
+          <button type="button" class="chip" id="go-today" hidden>Torna a avui</button>
+        </div>
+        <div class="controls">
+          <div class="seg" role="group" aria-label="Resolució">
+            <button type="button" data-res="15" aria-pressed="true">15 min</button>
+            <button type="button" data-res="60" aria-pressed="false">Hora</button>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="compare" checked>
+            <span id="compare-label">Compara amb demà</span>
+          </label>
+        </div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="chart-box"><canvas id="chart" role="img" aria-label="Gràfica del preu SPOT"></canvas></div>
+      <p class="note" id="compare-note" hidden></p>
+    </section>
+
+    <section class="card window-card">
+      <div class="window-head">
+        <h2>Franja més barata</h2>
+        <label class="inline">Durada
+          <select id="win-hours">
+            <option value="1">1 h</option>
+            <option value="2">2 h</option>
+            <option value="3" selected>3 h</option>
+            <option value="4">4 h</option>
+            <option value="6">6 h</option>
+            <option value="8">8 h</option>
+          </select>
+        </label>
+      </div>
+      <div class="window-grid" id="windows"></div>
+      <p class="note">Busca el bloc continu amb la mitjana més baixa, començant a qualsevol quart d'hora. Per a avui només compta el que queda de dia.</p>
+    </section>
+
+    <details class="card table-card">
+      <summary>Taula hora a hora</summary>
+      <div class="table-wrap"><table id="table"></table></div>
+    </details>
+
+    <footer class="foot">
+      <p id="source-line">Carregant dades…</p>
+      <p>El preu SPOT és el preu marginal del mercat diari d'OMIE (publicat en €/MWh; aquí es mostra per defecte en €/kWh: 100 €/MWh = 0,1000 €/kWh). No és el PVPC: no inclou peatges, càrrecs, ajust ni impostos. Els preus del dia següent es publiquen cap a les 13:00.</p>
+    </footer>
+  </main>
+
+  <script src="assets/chart.umd.min.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

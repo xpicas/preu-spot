@@ -1,0 +1,15 @@
+{
+  "name": "Preu SPOT de la llum",
+  "short_name": "Preu SPOT",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f4f2",
+  "theme_color": "#2a78d6",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
