@@ -37,46 +37,12 @@ Valors per defecte (tarifa **2.0TD**, ≤ 15 kW, península), editables al panel
 
 No s'hi inclouen el terme de potència ni les quotes fixes (quota de la comercialitzadora, bo social, lloguer del comptador), perquè no depenen de l'hora.
 
-## Comparació amb la factura (Chippio, 9/9–12/10/2026)
-
-- **Coincideixen:** peatges d'energia (2,41 €), càrrecs d'energia (3,80 €), terme de potència (es cobra a cost), base i tipus de l'IEE (5,112696 % sobre potència + energia + bo social) i IVA (21 % sobre tot).
-- **No coincideix el cost de l'energia.** Descomptant peatges i càrrecs, la factura cobra (sense impostos) 0,2388 €/kWh en P1, 0,1511 en P2 i 0,1844 en P3 (mitjana 0,1859). Això és SPOT + pèrdues de xarxa + costos del sistema (ajust, capacitat, operadors…), que a la web estan a 0. Per això la web dona un preu una mica inferior al real.
-- **Atenció:** els preus per kWh de la factura són **sense impostos**; els del mode «Amb peatges i impostos» els inclouen (×1,2719).
-- **Pendent:** calibrar `loss` i `adj` amb el consum horari del període (CSV d'e-distribución) i els preus SPOT d'aquelles dates.
-
 ## D'on surten les dades
 
 1. **`data/AAAA-MM-DD.json`**: el workflow de GitHub Actions (`scripts/fetch_omie.py`) baixa el fitxer oficial `marginalpdbc` d'OMIE cada 10 min entre les 10:00 i les 13:59 UTC (quan OMIE publica el dia següent) i un cop més a les 21:17 UTC. Si OMIE falla, prova REE. Només desa dies complets (92/96/100 quarts d'hora) i només fa commit si hi ha canvis.
 2. **API pública de REE** (`apidatos.ree.es`, sèrie 600 «Precio mercado spot»): la consulta el navegador directament si no hi ha el fitxer local. Admet CORS i no necessita token.
 
 La web funciona encara que el workflow no s'executi: llavors tira només de REE. La pàgina oberta busca els preus de demà cada 5 minuts a partir de les 12:00 i canvia de dia sola a mitjanit. Totes les hores són hora peninsular, sigui on sigui el navegador.
-
-## Posada en marxa (GitHub Pages)
-
-1. Crea un repositori **públic** a GitHub (p. ex. `preu-spot`). Pages gratuït requereix repositori públic.
-2. **Settings → Pages → Build and deployment → Source: GitHub Actions.** Fes-ho abans de pujar res.
-3. Puja els fitxers:
-   - **Amb git** (inclou les carpetes ocultes):
-     ```bash
-     cd preu-spot
-     git init -b main
-     git add .
-     git commit -m "Web preu SPOT"
-     git remote add origin https://github.com/<usuari>/preu-spot.git
-     git push -u origin main
-     ```
-   - **Arrossegant a la web de GitHub** (*Add file → Upload files*): selecciona el **contingut** de la carpeta (`assets`, `scripts`, `index.html`, `manifest.webmanifest`, `README.md`), no la carpeta en si. GitHub no accepta fitxers ocults per aquesta via: `data/.gitkeep`, `.nojekyll` i `.gitignore` es poden deixar fora (la carpeta `data/` la crea el workflow). El fitxer `.github/workflows/update.yml` sí que cal: crea'l amb *Add file → Create new file*, escrivint `.github/workflows/update.yml` com a nom i enganxant-hi el contingut.
-4. A **Actions** veuràs «Actualitza preus i publica». Si la primera execució falla perquè Pages encara no estava activat, torna-la a llançar (*Re-run all jobs* o *Run workflow*).
-5. La web queda a `https://<usuari>.github.io/preu-spot/`. Al mòbil: *Afegeix a la pantalla d'inici*.
-
-**Actualitzar la web:** substitueix els fitxers modificats (normalment `index.html`, `assets/app.js` i `assets/style.css`). El workflow publica sol després de cada canvi.
-
-## Allotjament: alternatives
-
-- **GitHub Pages** (recomanat): gratuït, sempre encès i amb la tasca automàtica d'OMIE. Límits molt per sobre de l'ús: 1 GB de web, 100 GB/mes de trànsit. Les dades creixen ~1,5 MB/any.
-- **Cloudflare Pages o Netlify**: també gratuïts i permeten arrossegar la carpeta, però no executen la tasca programada; la web dependria només de REE.
-- **Servidor propi** (VPS, Raspberry Pi, NAS): servir la carpeta amb qualsevol servidor web (p. ex. Caddy) i programar `scripts/fetch_omie.py` amb cron cada 10 min de 12 a 15 h (hora peninsular) + un cop a la nit. Requereix Python ≥ 3.9, sense dependències.
-- **Proves en local (Windows)**: a la carpeta, `python -m http.server 8000` i obrir `http://localhost:8000`. Només funciona mentre l'ordinador està encès.
 
 ## Manteniment
 
