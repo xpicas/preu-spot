@@ -52,7 +52,8 @@
 
   // ---------- format de preus ----------
   const state = {
-    unit: load('unit', 'kwh'),
+    mode: load('mode', 'spot'), // 'spot' | 'final'
+    cfg: null, // es carrega després de definir DEFAULTS
     res: +load('res', '15'),
     compare: load('compare', '1') === '1',
     base: todayStr(),
@@ -62,12 +63,62 @@
   function load(k, def) { try { return localStorage.getItem('spot.' + k) ?? def; } catch { return def; } }
   function save(k, v) { try { localStorage.setItem('spot.' + k, v); } catch { /* sense emmagatzematge */ } }
 
+  // Tots els valors que es mostren són en €/kWh.
   const nf = (min, max) => new Intl.NumberFormat('ca-ES', { minimumFractionDigits: min, maximumFractionDigits: max });
-  const fMWh = nf(2, 2), fKWh = nf(4, 4), fPct = nf(0, 0);
-  const conv = (p) => (state.unit === 'kwh' ? p / 1000 : p);
-  const unitLabel = () => (state.unit === 'kwh' ? '€/kWh' : '€/MWh');
-  const fmt = (p) => (p == null || Number.isNaN(p) ? '—' : (state.unit === 'kwh' ? fKWh : fMWh).format(conv(p)));
-  const fmtU = (p) => (p == null ? '—' : `${fmt(p)} ${unitLabel()}`);
+  const fKWh = nf(4, 4), fPct = nf(0, 0);
+  const unitLabel = () => '€/kWh';
+  const fmt = (p) => (p == null || Number.isNaN(p) ? '—' : fKWh.format(p));
+  const fmtU = (p) => (p == null ? '—' : `${fmt(p)} €/kWh`);
+
+  // ---------- preu final: peatges, càrrecs i impostos (tarifa 2.0TD, península) ----------
+  // Peatges: Resolució CNMC 18/12/2025. Càrrecs: Orden TED/1524/2025. Vigents des de l'1/1/2026.
+  const DEFAULTS = {
+    p1: 0.097553, // 0,033261 peatge + 0,064292 càrrec (punta)
+    p2: 0.029267, // 0,016409 + 0,012858 (pla)
+    p3: 0.003292, // 0,000077 + 0,003215 (vall)
+    loss: 0,      // % de pèrdues aplicat a l'energia (opcional)
+    adj: 0,       // €/kWh d'altres costos: serveis d'ajust, capacitat, OS/OM, marge... (opcional)
+    iee: 5.11269632, // % Impost especial sobre l'electricitat
+    iva: 21,         // % IVA
+  };
+  function loadCfg() {
+    try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('spot.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
+  }
+  state.cfg = loadCfg();
+  const saveCfg = () => save('cfg', JSON.stringify(state.cfg));
+  // Festius nacionals de data fixa i no substituïbles (+ 6 de gener): tot el dia és vall (P3).
+  // Els festius autonòmics i locals (11/9, 24/6, 26/12...) NO compten.
+  const HOLIDAYS = ['01-01', '01-06', '05-01', '08-15', '10-12', '11-01', '12-06', '12-08', '12-25'];
+  function period(ds, hour) {
+    const wd = dsToUTC(ds).getUTCDay();
+    if (wd === 0 || wd === 6 || HOLIDAYS.includes(ds.slice(5))) return 3;
+    if (hour < 8) return 3;
+    if ((hour >= 10 && hour < 14) || (hour >= 18 && hour < 22)) return 1;
+    return 2;
+  }
+  const PNAME = { 1: 'punta', 2: 'pla', 3: 'vall' };
+
+  // Escala de color ABSOLUTA de les barres (€/kWh): verd fins a `green`, groc a `mid`, vermell a partir de `red`.
+  // És la mateixa per a tots els dies; només canvia segons el mode, perquè el preu final és més alt que el SPOT.
+  const COLOR_SCALE = {
+    spot:  { green: 0.00, mid: 0.10, red: 0.20 },
+    final: { green: 0.05, mid: 0.20, red: 0.35 },
+  };
+  const RAMP = ['#0ca30c', '#f2b705', '#d03b3b']; // verd, groc, vermell
+
+  // Converteix un dia en brut (€/MWh) a valors en €/kWh segons el mode.
+  function derive(raw, ds) {
+    if (!raw) return null;
+    const c = state.cfg;
+    const spot = raw.slots.map((v) => (v == null ? null : v / 1000));
+    const per = spot.map((_, i) => period(ds, Math.floor(i / 4)));
+    if (state.mode !== 'final') return { ...raw, slots: spot, spot, per, energy: spot, toll: spot.map(() => 0), tax: spot.map(() => 0) };
+    const energy = spot.map((v) => (v == null ? null : v * (1 + c.loss / 100) + c.adj));
+    const toll = per.map((p) => c['p' + p]);
+    const total = energy.map((e, i) => (e == null ? null : (e + toll[i]) * (1 + c.iee / 100) * (1 + c.iva / 100)));
+    const tax = total.map((t, i) => (t == null ? null : t - energy[i] - toll[i]));
+    return { ...raw, slots: total, spot, per, energy, toll, tax };
+  }
 
   // ---------- dades ----------
   // Normalitza a 96 quarts per hora local. Dies de canvi d'hora: 92 (falten) o 100 (es fa la mitjana dels duplicats).
@@ -153,10 +204,6 @@
     }
     return best;
   }
-  function tertiles(slots) {
-    const v = valid(slots).sort((a, b) => a - b);
-    return [v[Math.floor(v.length / 3)], v[Math.floor((2 * v.length) / 3)]];
-  }
   const currentSlot = () => { const { h, m } = mParts(new Date()); return Math.floor((h * 60 + m) / 15); };
 
   // ---------- render ----------
@@ -171,13 +218,14 @@
       $('now-price').textContent = '—';
       $('now-label').textContent = 'Ara · sense dades';
       ['next-price', 'hour-price'].forEach((id) => ($(id).textContent = '—'));
-      $('now-level').hidden = true; $('now-vs').textContent = '';
+      $('now-vs').textContent = '';
       return;
     }
     const p = today.slots[idx];
-    $('now-label').textContent = `Ara · ${slotRange(idx)} (${dayFmt.format(dsToUTC(t))})`;
+    const per = today.per[idx];
+    $('now-label').textContent = `Ara · ${slotRange(idx)} (${dayFmt.format(dsToUTC(t))})${state.mode === 'final' ? ` · P${per} ${PNAME[per]}` : ''}`;
     $('now-price').textContent = fmt(p);
-    const next = idx + 1 < SLOTS ? today.slots[idx + 1] : state.days.get(addDays(t, 1))?.slots[0];
+    const next = idx + 1 < SLOTS ? today.slots[idx + 1] : derive(state.days.get(addDays(t, 1)), addDays(t, 1))?.slots[0];
     $('next-label').textContent = `Següent quart (${slotRange((idx + 1) % SLOTS)})`;
     $('next-price').textContent = fmtU(next);
     const h = Math.floor(idx / 4);
@@ -185,14 +233,11 @@
     $('hour-price').textContent = fmtU(mean(today.slots.slice(h * 4, h * 4 + 4)));
 
     const avg = mean(today.slots);
-    const [t1, t2] = tertiles(today.slots);
-    const lvl = p == null ? null : p <= t1 ? 'low' : p >= t2 ? 'high' : 'mid';
-    const el = $('now-level');
-    el.hidden = !lvl;
-    if (lvl) { el.dataset.l = lvl; el.textContent = { low: 'Barat', mid: 'Normal', high: 'Car' }[lvl] + ' per avui'; }
     if (p != null && avg) {
       const d = ((p - avg) / Math.abs(avg)) * 100;
-      $('now-vs').textContent = `${d >= 0 ? '+' : '−'}${fPct.format(Math.abs(d))} % vs mitjana del dia (${fmtU(avg)})`;
+      $('now-vs').textContent = Math.abs(d) < 0.5
+        ? `igual que la mitjana del dia (${fmtU(avg)})`
+        : `${d >= 0 ? '+' : '−'}${fPct.format(Math.abs(d))} % vs mitjana del dia (${fmtU(avg)})`;
     } else $('now-vs').textContent = '';
   }
 
@@ -275,37 +320,61 @@
   function renderChart(base, next, baseDs, nextDs) {
     const res = state.res;
     const n = res === 15 ? SLOTS : 24;
-    const series = (d) => (d ? (res === 15 ? d.slots : hourly(d.slots)).map((v) => (v == null ? null : conv(v))) : null);
+    const pick = (arr) => (res === 15 ? arr : hourly(arr));
+    const series = (d) => (d ? pick(d.slots) : null);
+    const comps = (d) => (d ? { energy: pick(d.energy), toll: pick(d.toll), tax: pick(d.tax), per: res === 15 ? d.per : d.per.filter((_, i) => i % 4 === 0) } : null);
     const a = series(base);
     const b = state.compare ? series(next) : null;
     const labels = Array.from({ length: n }, (_, i) => slotLabel(i, res));
     const isToday = baseDs === todayStr();
     const curIdx = isToday ? (res === 15 ? currentSlot() : Math.floor(currentSlot() / 4)) : null;
 
-    const cToday = css('--today'), cPast = css('--today-past'), cNow = css('--today-now'), cTom = css('--tomorrow');
+    const cTom = css('--tomorrow'), cNowRing = css('--text-primary');
+    const sc = COLOR_SCALE[state.mode === 'final' ? 'final' : 'spot'];
+    // Degradat vertical lligat als valors de l'eix Y (no al dia): es recalcula si canvia l'escala o la mida.
+    const gradCache = {};
+    const ramp = (alpha) => (c) => {
+      const { chart } = c;
+      const y = chart.scales.y, area = chart.chartArea;
+      if (!y || !area) return RAMP[0];
+      const key = `${alpha}|${y.min}|${y.max}|${area.top}|${area.bottom}`;
+      if (gradCache[key]) return gradCache[key];
+      const y0 = y.getPixelForValue(sc.green), y1 = y.getPixelForValue(sc.red);
+      const g = chart.ctx.createLinearGradient(0, y0, 0, y1 === y0 ? y0 - 1 : y1);
+      const a = (hex) => hex + Math.round(alpha * 255).toString(16).padStart(2, '0');
+      g.addColorStop(0, a(RAMP[0]));
+      g.addColorStop((sc.mid - sc.green) / (sc.red - sc.green), a(RAMP[1]));
+      g.addColorStop(1, a(RAMP[2]));
+      return (gradCache[key] = g);
+    };
+    const full = ramp(1), past = ramp(0.35);
+    const f2 = (v) => nf(2, 2).format(v);
+    $('scale-note').innerHTML = `<span class="scale-bar" aria-hidden="true"></span> Color segons el preu (escala fixa): verd ≤ ${f2(sc.green)} · groc ${f2(sc.mid)} · vermell ≥ ${f2(sc.red)} €/kWh`;
     const cGrid = css('--grid'), cText = css('--text-secondary'), cMuted = css('--text-muted'), cSurf = css('--surface');
 
     const datasets = [];
     if (a) datasets.push({
       type: 'bar', label: dayName(baseDs), data: a, order: 2,
-      backgroundColor: a.map((_, i) => (curIdx == null ? cToday : i < curIdx ? cPast : i === curIdx ? cNow : cToday)),
+      backgroundColor: (c) => (curIdx != null && c.dataIndex < curIdx ? past(c) : full(c)),
+      borderColor: cNowRing, borderWidth: a.map((_, i) => (i === curIdx ? 2 : 0)),
       borderRadius: { topLeft: res === 15 ? 2 : 4, topRight: res === 15 ? 2 : 4 }, borderSkipped: 'start',
-      categoryPercentage: 1, barPercentage: res === 15 ? 0.82 : 0.86,
+      categoryPercentage: 1, barPercentage: res === 15 ? 0.82 : 0.86, _c: comps(base),
     });
     if (b) datasets.push({
       type: 'line', label: dayName(nextDs), data: b, order: 1,
       borderColor: cTom, backgroundColor: cTom, borderWidth: 2, stepped: 'middle',
-      pointRadius: 0, pointHoverRadius: 4, pointHoverBorderColor: cSurf, pointHoverBorderWidth: 2, spanGaps: false,
+      pointRadius: 0, pointHoverRadius: 4, pointHoverBorderColor: cSurf, pointHoverBorderWidth: 2, spanGaps: false, _c: comps(next),
     });
 
     // llegenda HTML (només si hi ha 2 sèries)
     const lg = $('legend');
     lg.innerHTML = datasets.length > 1
-      ? `<span><i class="sw" style="background:${cToday}"></i>${dayName(baseDs)} · barres</span><span><i class="sw line" style="background:${cTom}"></i>${dayName(nextDs)} · línia</span>`
+      ? `<span><i class="sw" style="background:linear-gradient(0deg,${RAMP.join(',')})"></i>${dayName(baseDs)} · barres</span><span><i class="sw line" style="background:${cTom}"></i>${dayName(nextDs)} · línia</span>`
       : '';
 
     const unit = unitLabel();
-    const dec = state.unit === 'kwh' ? 4 : 2;
+    const dec = 4;
+    const f4 = (v) => (v == null ? '—' : nf(4, 4).format(v));
     const cfg = {
       data: { labels, datasets },
       options: {
@@ -319,6 +388,12 @@
             callbacks: {
               title: (items) => slotRange(items[0].dataIndex, res),
               label: (it) => ` ${it.dataset.label}: ${it.raw == null ? '—' : nf(dec, dec).format(it.raw)} ${unit}`,
+              afterLabel: (it) => {
+                const c = it.dataset._c;
+                if (state.mode !== 'final' || !c || it.raw == null) return '';
+                const i = it.dataIndex, p = c.per[i];
+                return [`    Energia ${f4(c.energy[i])}`, `    Peatges i càrrecs P${p} (${PNAME[p]}) ${f4(c.toll[i])}`, `    Impostos (IEE + IVA) ${f4(c.tax[i])}`];
+              },
               afterBody: (items) => {
                 if (items.length < 2 || items[0].raw == null || items[1].raw == null) return '';
                 const d = items[1].raw - items[0].raw;
@@ -340,7 +415,7 @@
           },
           y: {
             beginAtZero: true, grid: { color: cGrid }, border: { display: false },
-            ticks: { color: cMuted, font: { size: 11 }, callback: (v) => nf(0, state.unit === 'kwh' ? 3 : 0).format(v) },
+            ticks: { color: cMuted, font: { size: 11 }, callback: (v) => nf(0, 3).format(v) },
             title: { display: true, text: unit, color: cMuted, font: { size: 11 } },
           },
         },
@@ -349,7 +424,7 @@
     };
     if (state.chart) state.chart.destroy();
     state.chart = new Chart($('chart'), cfg);
-    $('chart').setAttribute('aria-label', `Preu SPOT ${dayName(baseDs)}${b ? ' i ' + dayName(nextDs) : ''}, cada ${res} minuts`);
+    $('chart').setAttribute('aria-label', `Preu ${state.mode === 'final' ? 'final' : 'SPOT'} ${dayName(baseDs)}${b ? ' i ' + dayName(nextDs) : ''}, cada ${res} minuts`);
   }
 
   function renderNav(baseDs, next, nextDs) {
@@ -385,7 +460,13 @@
   async function render() {
     const baseDs = state.base, nextDs = addDays(baseDs, 1);
     const t = todayStr();
-    const [base, next, today] = await Promise.all([getDay(baseDs), getDay(nextDs), getDay(t)]);
+    const [rb, rn, rt] = await Promise.all([getDay(baseDs), getDay(nextDs), getDay(t)]);
+    const base = derive(rb, baseDs), next = derive(rn, nextDs), today = derive(rt, t);
+    const fin = state.mode === 'final';
+    $('sub').textContent = fin
+      ? `SPOT + peatges i càrrecs 2.0TD + IEE ${nf(0, 2).format(state.cfg.iee)} % + IVA ${nf(0, 2).format(state.cfg.iva)} %`
+      : 'Mercat diari d\'OMIE · zona Espanya · sense peatges ni impostos';
+    $('title').textContent = fin ? 'Preu final de la llum' : 'Preu SPOT de la llum';
     renderHero(today);
     renderNav(baseDs, next, nextDs);
     renderStats(base, next, baseDs, nextDs);
@@ -420,9 +501,19 @@
   function setPressed(sel, attr, val) {
     document.querySelectorAll(sel).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset[attr] === String(val))));
   }
-  document.querySelectorAll('[data-unit]').forEach((b) => b.addEventListener('click', () => {
-    state.unit = b.dataset.unit; save('unit', state.unit); setPressed('[data-unit]', 'unit', state.unit); render();
+  document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => {
+    state.mode = b.dataset.mode; save('mode', state.mode); setPressed('[data-mode]', 'mode', state.mode); render();
   }));
+  // paràmetres del preu final
+  const CFG_KEYS = ['p1', 'p2', 'p3', 'loss', 'adj', 'iee', 'iva'];
+  const numFmt = (v) => String(v).replace('.', ',');
+  function fillCfg() { CFG_KEYS.forEach((k) => { $('cfg-' + k).value = numFmt(state.cfg[k]); }); }
+  CFG_KEYS.forEach((k) => $('cfg-' + k).addEventListener('change', (e) => {
+    const v = parseFloat(String(e.target.value).replace(',', '.'));
+    if (Number.isFinite(v) && v >= 0) { state.cfg[k] = v; saveCfg(); render(); }
+    fillCfg();
+  }));
+  $('cfg-reset').addEventListener('click', () => { state.cfg = { ...DEFAULTS }; saveCfg(); fillCfg(); render(); });
   document.querySelectorAll('[data-res]').forEach((b) => b.addEventListener('click', () => {
     state.res = +b.dataset.res; save('res', state.res); setPressed('[data-res]', 'res', state.res); render();
   }));
@@ -435,7 +526,8 @@
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => render());
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 
-  setPressed('[data-unit]', 'unit', state.unit);
+  setPressed('[data-mode]', 'mode', state.mode);
+  fillCfg();
   setPressed('[data-res]', 'res', state.res);
   $('compare').checked = state.compare;
 
