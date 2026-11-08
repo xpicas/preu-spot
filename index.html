@@ -31,19 +31,8 @@
           <span id="now-vs"></span>
         </p>
       </div>
-      <div class="hero-side">
-        <div class="mini">
-          <span class="mini-k" id="next-label">Següent quart</span>
-          <span class="mini-v" id="next-price">—</span>
-        </div>
-        <div class="mini">
-          <span class="mini-k" id="hour-label">Mitjana d'aquesta hora</span>
-          <span class="mini-v" id="hour-price">—</span>
-        </div>
-      </div>
     </section>
 
-    <section class="stats" id="stats"></section>
 
     <section class="card chart-card">
       <div class="chart-head">
@@ -69,32 +58,8 @@
       </div>
       <div class="legend" id="legend"></div>
       <div class="chart-box"><canvas id="chart" role="img" aria-label="Gràfica del preu SPOT"></canvas></div>
-      <p class="note scale-note" id="scale-note"></p>
       <p class="note" id="compare-note" hidden></p>
     </section>
-
-    <section class="card window-card">
-      <div class="window-head">
-        <h2>Franja més barata</h2>
-        <label class="inline">Durada
-          <select id="win-hours">
-            <option value="1">1 h</option>
-            <option value="2">2 h</option>
-            <option value="3" selected>3 h</option>
-            <option value="4">4 h</option>
-            <option value="6">6 h</option>
-            <option value="8">8 h</option>
-          </select>
-        </label>
-      </div>
-      <div class="window-grid" id="windows"></div>
-      <p class="note">Busca el bloc continu amb la mitjana més baixa, començant a qualsevol quart d'hora. Per a avui només compta el que queda de dia.</p>
-    </section>
-
-    <details class="card table-card">
-      <summary>Taula hora a hora</summary>
-      <div class="table-wrap"><table id="table"></table></div>
-    </details>
 
     <details class="card cfg-card">
       <summary>Paràmetres del preu amb peatges i impostos</summary>
