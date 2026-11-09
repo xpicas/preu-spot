@@ -86,8 +86,13 @@ h2 { font-size: 16px; margin: 0; }
 .toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
 .toggle input { accent-color: var(--tomorrow); width: 16px; height: 16px; }
 .toggle input:disabled + span { opacity: .5; }
-.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); min-height: 20px; margin-bottom: 4px; }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.readout { display: flex; align-items: baseline; gap: 6px 18px; flex-wrap: wrap; min-height: 34px; padding: 4px 0 10px; margin-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-secondary); }
+.readout span { display: inline-flex; align-items: center; gap: 6px; }
+.ro-time { font-size: 18px; font-weight: 650; color: var(--text-primary); }
+.ro-v b { color: var(--text-primary); font-weight: 650; }
+.ro-u { color: var(--text-muted); font-size: 12px; }
+.ro-hint { color: var(--text-muted); font-size: 13px; }
+#chart { touch-action: pan-y; cursor: crosshair; }
 .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 .sw.line { height: 3px; border-radius: 2px; width: 16px; }
 .chart-box { position: relative; height: 320px; }
