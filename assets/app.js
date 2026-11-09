@@ -247,6 +247,36 @@
     },
   };
 
+  // Franja seleccionada: banda vertical + línia (darrere les barres) i etiqueta d'hora a l'eix X.
+  const selPlugin = {
+    id: 'sel',
+    beforeDatasetsDraw(chart, _a, o) {
+      if (o.index == null) return;
+      const x = chart.scales.x, { top, bottom } = chart.chartArea, ctx = chart.ctx;
+      const w = x.width / o.n, cx = x.getPixelForValue(o.index);
+      ctx.save();
+      ctx.fillStyle = o.band; ctx.fillRect(cx - w / 2, top, w, bottom - top);
+      ctx.strokeStyle = o.line; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx, bottom); ctx.stroke();
+      ctx.restore();
+    },
+    afterDraw(chart, _a, o) {
+      if (o.index == null) return;
+      const x = chart.scales.x, { bottom, left, right } = chart.chartArea, ctx = chart.ctx;
+      const pw = 48, ph = 18;
+      const cx = Math.max(left + pw / 2, Math.min(right - pw / 2, x.getPixelForValue(o.index)));
+      ctx.save();
+      ctx.fillStyle = o.pillBg;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(cx - pw / 2, bottom + 3, pw, ph, ph / 2); else ctx.rect(cx - pw / 2, bottom + 3, pw, ph);
+      ctx.fill();
+      ctx.fillStyle = o.pillFg; ctx.font = '600 11px system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(o.label, cx, bottom + 3 + ph / 2);
+      ctx.restore();
+    },
+  };
+
   function renderChart(base, next, baseDs, nextDs) {
     const res = state.res;
     const n = res === 15 ? SLOTS : 24;
@@ -282,7 +312,9 @@
     const datasets = [];
     if (a) datasets.push({
       type: 'bar', label: dayName(baseDs), data: a, order: 2,
-      backgroundColor: (c) => (curIdx != null && c.dataIndex < curIdx ? past(c) : full(c)),
+      // Amb una franja seleccionada, la resta de barres s'esvaeixen; sense selecció, s'esvaeix el passat.
+      backgroundColor: (c) => (sel != null ? (c.dataIndex === sel ? full(c) : past(c))
+        : (curIdx != null && c.dataIndex < curIdx ? past(c) : full(c))),
       borderColor: cNowRing, borderWidth: a.map((_, i) => (i === curIdx ? 2 : 0)),
       borderRadius: { topLeft: res === 15 ? 2 : 4, topRight: res === 15 ? 2 : 4 }, borderSkipped: 'start',
       categoryPercentage: 1, barPercentage: res === 15 ? 0.82 : 0.86,
@@ -290,33 +322,55 @@
     if (b) datasets.push({
       type: 'line', label: dayName(nextDs), data: b, order: 1,
       borderColor: cTom, backgroundColor: cTom, borderWidth: 2, stepped: 'middle',
-      pointRadius: 0, pointHoverRadius: 4, pointHoverBorderColor: cSurf, pointHoverBorderWidth: 2, spanGaps: false,
+      pointRadius: (c) => (c.dataIndex === sel ? 5 : 0), pointHoverRadius: (c) => (c.dataIndex === sel ? 5 : 0),
+      pointBorderColor: cSurf, pointBorderWidth: 2, pointHoverBorderColor: cSurf, pointHoverBorderWidth: 2, spanGaps: false,
     });
 
-    // llegenda HTML (només si hi ha 2 sèries)
-    const lg = $('legend');
-    lg.innerHTML = datasets.length > 1
-      ? `<span><i class="sw" style="background:linear-gradient(0deg,${RAMP.join(',')})"></i>${dayName(baseDs)} · barres</span><span><i class="sw line" style="background:${cTom}"></i>${dayName(nextDs)} · línia</span>`
-      : '';
+    // Lector fix a sobre de la gràfica (substitueix la bafarada). Sense selecció: quart actual (si és avui).
+    let sel = null;
+    const swBar = (v) => `<i class="sw" style="background:${v == null ? 'transparent' : colorAt(v)}"></i>`;
+    function readout() {
+      const i = sel ?? curIdx;
+      const el = $('readout');
+      if (i == null || !a) { el.innerHTML = '<span class="ro-hint">Passa per sobre de la gràfica o toca-la per veure el preu d\'una franja</span>'; return; }
+      let h = `<span class="ro-time">${sel == null ? 'Ara · ' : ''}${slotRange(i, res)}</span>`;
+      h += `<span class="ro-v">${swBar(a[i])}${dayName(baseDs)} <b>${fmt(a[i])}</b></span>`;
+      if (b) h += `<span class="ro-v"><i class="sw line" style="background:${cTom}"></i>${dayName(nextDs)} <b>${fmt(b[i])}</b></span>`;
+      el.innerHTML = h + '<span class="ro-u">€/kWh</span>';
+    }
+    function setSel(i) {
+      if (i === sel) return;
+      sel = i;
+      const ch = state.chart;
+      if (sel == null) ch._lastEvent = null; // Chart.js torna a aplicar l'últim moviment en fer update(); l'oblidem en treure la selecció
+      ch.options.plugins.sel.index = sel;
+      ch.options.plugins.sel.label = sel == null ? '' : slotLabel(sel, res);
+      ch.update('none');
+      readout();
+    }
+    state.clearSel = () => setSel(null);
 
     const unit = unitLabel();
-    const dec = 4;
     const cfg = {
       data: { labels, datasets },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         layout: { padding: { top: 16 } },
         interaction: { mode: 'index', intersect: false },
+        events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'],
+        onHover: (evt, _els, chart) => {
+          const pts = chart.getElementsAtEventForMode(evt, 'index', { intersect: false }, false);
+          setSel(pts.length ? pts[0].index : null);
+        },
+        onClick: (evt, _els, chart) => {
+          const pts = chart.getElementsAtEventForMode(evt, 'index', { intersect: false }, false);
+          setSel(pts.length ? pts[0].index : null);
+        },
         plugins: {
           legend: { display: false },
           nowLine: { index: curIdx, color: cText },
-          tooltip: {
-            itemSort: (x, y) => x.datasetIndex - y.datasetIndex, // primer el dia triat, després demà
-            callbacks: {
-              title: (items) => slotRange(items[0].dataIndex, res),
-              label: (it) => ` ${it.dataset.label}: ${it.raw == null ? '—' : nf(dec, dec).format(it.raw)} ${unit}`,
-            },
-          },
+          tooltip: { enabled: false },
+          sel: { index: null, n, label: '', band: 'rgba(128,128,128,0.16)', line: cText, pillBg: css('--text-primary'), pillFg: cSurf },
         },
         scales: {
           x: {
@@ -336,10 +390,11 @@
           },
         },
       },
-      plugins: [nowLine],
+      plugins: [nowLine, selPlugin],
     };
     if (state.chart) state.chart.destroy();
     state.chart = new Chart($('chart'), cfg);
+    readout();
     $('chart').setAttribute('aria-label', `Preu ${state.mode === 'final' ? 'final' : 'SPOT'} ${dayName(baseDs)}${b ? ' i ' + dayName(nextDs) : ''}, cada ${res} minuts`);
   }
 
@@ -435,6 +490,10 @@
   $('next-day').addEventListener('click', () => { state.base = addDays(state.base, 1); render(); });
   $('go-today').addEventListener('click', () => { state.base = todayStr(); render(); });
   $('date-pick').addEventListener('change', (e) => { if (e.target.value) { state.base = e.target.value; render(); } });
+  // Treure la selecció en sortir de la gràfica amb el ratolí o en tocar fora d'ella.
+  const clearSel = (e) => { if ((!e || e.target !== $('chart')) && state.clearSel) state.clearSel(); };
+  $('chart').addEventListener('mouseleave', () => state.clearSel && state.clearSel());
+  ['pointerdown', 'touchstart'].forEach((t) => document.addEventListener(t, clearSel, { passive: true }));
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => render());
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 
