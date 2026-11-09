@@ -332,6 +332,7 @@
     function readout() {
       const i = sel ?? curIdx;
       const el = $('readout');
+      if (!el) return; // index.html d'una versió anterior: no trenquem la gràfica
       if (i == null || !a) { el.innerHTML = '<span class="ro-hint">Passa per sobre de la gràfica o toca-la per veure el preu d\'una franja</span>'; return; }
       let h = `<span class="ro-time">${sel == null ? 'Ara · ' : ''}${slotRange(i, res)}</span>`;
       h += `<span class="ro-v">${swBar(a[i])}${dayName(baseDs)} <b>${fmt(a[i])}</b></span>`;
